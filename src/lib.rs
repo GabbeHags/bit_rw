@@ -1,10 +1,22 @@
 #![deny(unsafe_code)]
 
-use std::fmt::{Binary, Debug, Formatter};
+use std::fmt::{Binary, Debug, Display, Formatter};
 
 #[derive(Debug)]
 pub enum Error {
     IndexOutOfRange,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::IndexOutOfRange => {
+                f.write_str("The given index is larger than the number of bits.")
+            }
+            #[allow(unreachable_patterns)]
+            _ => unimplemented!(),
+        }
+    }
 }
 
 macro_rules! cast_to_bit {
@@ -76,44 +88,89 @@ macro_rules! impl_from_and_into_for_bit {
 impl_from_and_into_for_bit! { u8 u16 u32 u64 u128 usize}
 
 macro_rules! impl_bits_for_size {
-    ($(($name:ident, $size:ty))*) => ($(
+    ($(($name:ident, $size:ty, $index_type:ty))*) => ($(
 
     #[derive(Default)]
+    #[doc = concat!(
+        "Wrapper type of the primitive type `",
+        stringify!($size),
+        "` to be able to read/write to the bits."
+    )]
     pub struct $name {
         bits: $size,
     }
 
     impl $name {
+
+        #[doc = concat!("Creates a `", stringify!($name), "`")]
+        /// , the input `bits` is the bits that is going to be interacted with.
         pub fn new(bits: $size) -> Self {
             Self { bits }
         }
 
-        pub fn push_back(&mut self, bit: Bit) {
+        /// Shifts all bits to the left and inserts the `bit` at the left most bit.
+        ///
+        /// Shifting with bit [`Bit::Zero`] is the same as a normal shift left.
+        ///
+        /// # Example
+        /// ```
+        #[doc = concat!("use bit_rw::{", stringify!($name), ", Bit};")]
+        ///
+        #[doc = concat!("let mut b = ", stringify!($name), "::new(0);   // 0b0")]
+        /// b.shift_left_with(Bit::One);  // 0b01
+        /// b.shift_left_with(Bit::One);  // 0b011
+        /// b.shift_left_with(Bit::Zero); // 0b0110
+        ///
+        /// assert_eq!(b, 6.into());
+        /// ```
+        pub fn shift_left_with(&mut self, bit: Bit) {
             self.bits <<= 1;
             if bit == Bit::One {
                 self.bits |= 1;
             }
         }
 
-        pub fn push_front(&mut self, bit: Bit) {
+        /// Shifts all bits to the right and inserts the `bit` at the right most bit.
+        ///
+        /// Shifting with bit [`Bit::Zero`] is the same as a normal shift right.
+        ///
+        /// # Example
+        /// ```
+        #[doc = concat!("use bit_rw::{", stringify!($name), ", Bit};")]
+        ///
+        #[doc = concat!("let mut b = ", stringify!($name), "::new(0);  // 0b0")]
+        /// b.shift_right_with(Bit::One);     // 0b1000...
+        /// // b.shift_right_with(Bit::One);  // 0b11000...
+        /// // b.shift_right_with(Bit::Zero); // 0b011000...
+        ///
+        /// // assert_eq!(b, (0b011000...).into());
+        #[doc = concat!(
+            "assert_eq!(b, 2_",
+            stringify!($size),
+            ".pow(<",
+            stringify!($size),
+            ">::BITS-1).into());"
+        )]
+        /// ```
+        pub fn shift_right_with(&mut self, bit: Bit) {
             self.bits >>= 1;
             if bit == Bit::One {
                 self.bits |= 1 << (<$size>::BITS-1);
             }
         }
 
-        pub fn get_and_set<F: FnOnce(Bit) -> Bit>(&mut self, index: $size, f: F) -> Result<(), Error> {
+        pub fn get_and_set<F: FnOnce(Bit) -> Bit>(&mut self, index: $index_type, f: F) -> Result<(), Error> {
             let bit = self.get(index)?;
             self.set_unchecked(index, f(bit));
             Ok(())
         }
 
-        pub fn get_and_set_unchecked<F: FnOnce(Bit) -> Bit>(&mut self, index: $size, f: F) {
+        pub fn get_and_set_unchecked<F: FnOnce(Bit) -> Bit>(&mut self, index: $index_type, f: F) {
             self.set_unchecked(index, f(self.get_unchecked(index)));
         }
 
-        pub fn set(&mut self, index: $size, bit: Bit) -> Result<(), Error> {
-            if (0..(<$size>::BITS as $size)).contains(&index) {
+        pub fn set(&mut self, index: $index_type, bit: Bit) -> Result<(), Error> {
+            if (0..(<$size>::BITS as $index_type)).contains(&index) {
                 self.set_unchecked(index, bit);
                 Ok(())
             } else {
@@ -121,22 +178,22 @@ macro_rules! impl_bits_for_size {
             }
         }
 
-        pub fn set_unchecked(&mut self, index: $size, bit: Bit) {
+        pub fn set_unchecked(&mut self, index: $index_type, bit: Bit) {
             match bit {
                 Bit::Zero => self.bits &= !(1 << index),
                 Bit::One => self.bits |= 1 << index,
             }
         }
 
-        pub fn get(&self, index: $size) -> Result<Bit, Error> {
-             if (0..(<$size>::BITS as $size)).contains(&index) {
+        pub fn get(&self, index: $index_type) -> Result<Bit, Error> {
+             if (0..(<$size>::BITS as $index_type)).contains(&index) {
                 Ok(self.get_unchecked(index))
             } else {
                 Err(Error::IndexOutOfRange)
             }
         }
 
-        pub fn get_unchecked(&self, index: $size) -> Bit {
+        pub fn get_unchecked(&self, index: $index_type) -> Bit {
             if self.bits & 1 << index == 0 {
                 Bit::Zero
             } else {
@@ -167,7 +224,7 @@ macro_rules! impl_bits_for_size {
     )*)
 }
 
-impl_bits_for_size! { (Bits8, u8) (Bits16, u16) (Bits32, u32) (Bits64, u64) (Bits128, u128) (BitsSize, usize) }
+impl_bits_for_size! { (Bits8, u8, u8) (Bits16, u16, u16) (Bits32, u32, u32) (Bits64, u64, u32) (Bits128, u128, u32) }
 
 macro_rules! impl_debug_for_bits {
     ($(($name:ident, $bits_len:literal))*) => ($(
@@ -188,45 +245,91 @@ macro_rules! impl_debug_for_bits {
 }
 
 impl_debug_for_bits! { (Bits8, 8) (Bits16, 16) (Bits32, 32) (Bits64, 64) (Bits128, 128) }
-#[cfg(any(
-    not(any(
-        target_pointer_width = "32",
-        target_pointer_width = "16",
-        target_pointer_width = "8"
-    )),
-    target_pointer_width = "64"
-))]
-impl_debug_for_bits! { (BitsSize, 64) }
-#[cfg(target_pointer_width = "32")]
-impl_debug_for_bits! { (BitsSize, 32) }
-#[cfg(target_pointer_width = "16")]
-impl_debug_for_bits! { (BitsSize, 16) }
-#[cfg(target_pointer_width = "8")]
-impl_debug_for_bits! { (BitsSize, 8) }
 
 #[cfg(test)]
-mod tests {
+mod tests_bits64 {
+    use crate::Bit::*;
+    use crate::*;
+
+    #[test]
+    fn get_and_set_set_if_one() {
+        let mut b = Bits64::new(!0);
+        let mut eq: u64 = !0;
+        for i in 0..64 {
+            b.get_and_set(i, |bit| if bit == One { Zero } else { bit })
+                .unwrap();
+            eq <<= 1;
+            assert_eq!(b, eq.into());
+        }
+    }
+
+    #[test]
+    fn get_and_set_set_invert() {
+        let mut b1 = Bits64::new(0);
+        let mut b2 = Bits64::new(!0);
+        let mut eq1: u64 = 0;
+        let mut eq2: u64 = !0;
+        for i in 0..64 {
+            b1.get_and_set(i, |bit| bit.invert()).unwrap();
+            b2.get_and_set(i, |bit| bit.invert()).unwrap();
+            eq1 |= 1 << i;
+            eq2 <<= 1;
+            assert_eq!(b1, eq1.into());
+            assert_eq!(b2, eq2.into());
+        }
+    }
+}
+#[cfg(test)]
+mod tests_bits8 {
     use crate::Bit::*;
     use crate::*;
 
     #[test]
     fn get_and_set_out_of_range() {
-        todo!()
+        assert!(matches!(
+            Bits8::default().get_and_set(8, |_| One).unwrap_err(),
+            Error::IndexOutOfRange
+        ));
     }
 
     #[test]
     fn get_and_set_set_if_one() {
-        todo!()
+        let mut b = Bits8::new(!0);
+        let mut eq: u8 = !0;
+        for i in 0..8 {
+            b.get_and_set(i, |bit| if bit == One { Zero } else { bit })
+                .unwrap();
+            eq <<= 1;
+            assert_eq!(b, eq.into());
+        }
     }
 
     #[test]
     fn get_and_set_set_if_zero() {
-        todo!()
+        let mut b = Bits8::new(0);
+        let mut eq: u8 = 0;
+        for i in 0..8 {
+            b.get_and_set(i, |bit| if bit == Zero { One } else { bit })
+                .unwrap();
+            eq |= 1 << i;
+            assert_eq!(b, eq.into());
+        }
     }
 
     #[test]
     fn get_and_set_set_invert() {
-        todo!()
+        let mut b1 = Bits8::new(0);
+        let mut b2 = Bits8::new(!0);
+        let mut eq1: u8 = 0;
+        let mut eq2: u8 = !0;
+        for i in 0..8 {
+            b1.get_and_set(i, |bit| bit.invert()).unwrap();
+            b2.get_and_set(i, |bit| bit.invert()).unwrap();
+            eq1 |= 1 << i;
+            eq2 <<= 1;
+            assert_eq!(b1, eq1.into());
+            assert_eq!(b2, eq2.into());
+        }
     }
 
     #[test]
@@ -274,113 +377,113 @@ mod tests {
     }
 
     #[test]
-    fn push_back_ones() {
+    fn shift_left_with_ones() {
         let mut b = Bits8::default();
         assert_eq!(b, 0b0.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b1.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b11.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b111.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b1111.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b11111.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b111111.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b1111111.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b11111111.into());
     }
     #[test]
-    fn push_back_zeros() {
+    fn shift_left_with_zeros() {
         let mut b = Bits8::default();
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0.into());
     }
     #[test]
-    fn push_back_zeros_and_ones() {
+    fn shift_left_with_zeros_and_ones() {
         let mut b = Bits8::default();
         assert_eq!(b, 0b0.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b1.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0b10.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b101.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0b1010.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b1_0101.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0b1010_10.into());
-        b.push_back(One);
+        b.shift_left_with(One);
         assert_eq!(b, 0b101_0101.into());
-        b.push_back(Zero);
+        b.shift_left_with(Zero);
         assert_eq!(b, 0b1010_1010.into());
     }
 
     #[test]
-    fn push_front_ones() {
+    fn shift_right_with_ones() {
         let mut b = Bits8::default();
         assert_eq!(b, 0b0.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1000_0000.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1100_0000.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1110_0000.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1111_0000.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1111_1000.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1111_1100.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1111_1110.into());
-        b.push_front(One);
+        b.shift_right_with(One);
         assert_eq!(b, 0b1111_1111.into());
     }
 
     #[test]
-    fn push_front_zeros() {
+    fn shift_right_with_zeros() {
         let mut b = Bits8::default();
         assert_eq!(b, 0.into());
         for _ in 0..8 {
-            b.push_front(Zero);
+            b.shift_right_with(Zero);
             assert_eq!(b, 0.into());
         }
     }
 
     #[test]
-    fn push_front_zeros_and_ones() {
+    fn shift_right_with_zeros_and_ones() {
         let mut b = Bits8::default();
         assert_eq!(b, 0b0.into());
         let mut eq: u8 = 0;
         for i in 0..8 {
             eq >>= 1;
             if i % 2 == 0 {
-                b.push_front(One);
+                b.shift_right_with(One);
                 eq |= 1 << 7;
             } else {
-                b.push_front(Zero);
+                b.shift_right_with(Zero);
             }
             assert_eq!(b, eq.into());
         }
@@ -388,8 +491,10 @@ mod tests {
 
     #[test]
     fn get_out_of_range() {
-        let b = Bits8::default();
-        assert!(matches!(b.get(8).unwrap_err(), Error::IndexOutOfRange));
+        assert!(matches!(
+            Bits8::default().get(8).unwrap_err(),
+            Error::IndexOutOfRange
+        ));
     }
 
     #[test]

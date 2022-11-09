@@ -96,7 +96,7 @@ macro_rules! impl_from_and_into_for_bit {
     )*)
 }
 
-impl_from_and_into_for_bit! { u8 u16 u32 u64 u128 usize}
+impl_from_and_into_for_bit! { u8 i8 u16 i16 u32 i32 u64 i64 u128 i128 usize isize}
 
 macro_rules! impl_bits {
     ($name:ident, $size:ty, $index_type:ty, $bit_len:literal) => {
@@ -438,534 +438,413 @@ impl_all_bits! {
 }
 
 #[cfg(test)]
-mod tests_bits64 {
-    use crate::Bit::*;
-    use crate::*;
+mod bits_tests {
+    use paste::paste;
 
-    #[test]
-    fn get_and_set_set_if_one() {
-        let mut b = Bits64::new(!0);
-        let mut eq: u64 = !0;
-        for i in 0..64 {
-            b.get_and_set(i, |bit| if bit == One { Zero } else { bit })
-                .unwrap();
-            eq <<= 1;
-            assert_eq!(b, eq.into());
+    macro_rules! create_bits_tests {
+    ($(($name:ident, $inner_type:ty, $index_type:ty))*) => ($(
+    paste! {
+        mod [<tests_ $name:lower>] {
+            use crate::Bit::*;
+            use crate::*;
+            #[test]
+            fn get_and_set_set_if_one() {
+                let mut b = $name::new(!0);
+                let mut eq: $inner_type = !0;
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b.get_and_set(i, |bit| if bit == One { Zero } else { bit })
+                        .unwrap();
+                    eq <<= 1;
+                    assert_eq!(b, eq.into());
+                }
+            }
+
+            #[test]
+            fn get_and_set_set_if_zero() {
+                let mut b = $name::new(0);
+                let mut eq: $inner_type = 0;
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b.get_and_set(i, |bit| if bit == Zero { One } else { bit })
+                        .unwrap();
+                    eq |= 1 << i;
+                    assert_eq!(b, eq.into());
+                }
+            }
+
+            #[test]
+            fn get_and_set_set_invert() {
+                let mut b1 = $name::new(0);
+                let mut b2 = $name::new(!0);
+                let mut eq1: $inner_type = 0;
+                let mut eq2: $inner_type = !0;
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b1.get_and_set(i, |bit| bit.invert()).unwrap();
+                    b2.get_and_set(i, |bit| bit.invert()).unwrap();
+                    eq1 |= 1 << i;
+                    eq2 <<= 1;
+                    assert_eq!(b1, eq1.into());
+                    assert_eq!(b2, eq2.into());
+                }
+            }
+
+            #[test]
+            fn iterator_test() {
+                let b = $name::new(0);
+                let mut count = 0;
+                for bit in &b {
+                    count += 1;
+                    assert_eq!(bit, Zero);
+                }
+                assert_eq!(b, 0.into());
+                assert_eq!(count, $inner_type::BITS);
+                
+                let b = $name::new(!0);
+                count = 0;
+        
+                for bit in b {
+                    count += 1;
+                    assert_eq!(bit, One);
+                }
+                assert_eq!(count, $inner_type::BITS);
+            }
+
+            #[test]
+            fn get_and_set_out_of_range() {
+                assert!(matches!(
+                    $name::default()
+                    .get_and_set($inner_type::BITS as $index_type, |_| One)
+                    .unwrap_err(),
+                    Error::IndexOutOfRange
+                ));
+            }
+            #[test]
+            #[should_panic]
+            fn get_and_set_unchecked_panic() {
+                $name::default().get_and_set_unchecked($inner_type::BITS as $index_type, |_| One);
+                unreachable!();
+            }
+
+            #[test]
+            fn get_and_set_unchecked_set_if_one() {
+                let mut b = $name::new(!0);
+                let mut eq: $inner_type = !0;
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b.get_and_set_unchecked(i, |bit| if bit == One { Zero } else { bit });
+                    eq <<= 1;
+                    assert_eq!(b, eq.into());
+                }
+            }
+        
+            #[test]
+            fn get_and_set_unchecked_set_if_zero() {
+                let mut b = $name::new(0);
+                let mut eq: $inner_type = 0;
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b.get_and_set_unchecked(i, |bit| if bit == Zero { One } else { bit });
+                    eq |= 1 << i;
+                    assert_eq!(b, eq.into());
+                }
+            }
+        
+            #[test]
+            fn get_and_set_unchecked_set_invert() {
+                let mut b1 = $name::new(0);
+                let mut b2 = $name::new(!0);
+                let mut eq1: $inner_type = 0;
+                let mut eq2: $inner_type = !0;
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b1.get_and_set_unchecked(i, |bit| bit.invert());
+                    b2.get_and_set_unchecked(i, |bit| bit.invert());
+                    eq1 |= 1 << i;
+                    eq2 <<= 1;
+                    assert_eq!(b1, eq1.into());
+                    assert_eq!(b2, eq2.into());
+                }
+            }
+
+            #[test]
+            fn shift_left_with_ones() {
+                let mut b = $name::default();
+                let mut eq: $inner_type = 1;
+                assert_eq!(b, 0b0.into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b.shift_left_with(One);
+                    eq |= 1 << i;
+                    assert_eq!(b, eq.into());
+                }
+            }
+
+            #[test]
+            fn shift_left_with_zeros() {
+                let mut b = $name::default();
+                assert_eq!(b, 0b0.into());
+                for _ in 0..($inner_type::BITS as $index_type) {
+                    b.shift_left_with(Zero);
+                    assert_eq!(b, 0.into());
+                }
+            }
+            #[test]
+            fn shift_left_with_zeros_and_ones() {
+                let mut b = $name::default();
+                let mut eq = 0;
+                assert_eq!(b, 0.into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    b.shift_left_with((i % 2).into());
+                    eq <<= 1;
+                    if (i % 2) == 1 {
+                        eq |= 1;
+                    }
+                    assert_eq!(b, eq.into());
+                }
+            }
+
+            #[test]
+            fn shift_right_with_ones() {
+                let mut b = $name::default();
+                let mut eq = 0;
+                assert_eq!(b, 0.into());
+                for _ in 0..($inner_type::BITS as $index_type) {
+                    b.shift_right_with(One);
+                    eq ^= !0;
+                    eq >>= 1;
+                    eq ^= !0;
+                    assert_eq!(b, eq.into());
+                }
+            }
+            #[test]
+            fn shift_right_with_zeros() {
+                let mut b = $name::default();
+                assert_eq!(b, 0.into());
+                for _ in 0..($inner_type::BITS as $index_type) {
+                    b.shift_right_with(Zero);
+                    assert_eq!(b, 0.into());
+                }
+            }
+            #[test]
+            fn shift_right_with_zeros_and_ones() {
+                let mut b = $name::default();
+                assert_eq!(b, 0.into());
+                let mut eq = 0;
+                for i in 0..($inner_type::BITS as $index_type) {
+                    eq >>= 1;
+                    if i % 2 == 0 {
+                        b.shift_right_with(One);
+                        eq |= 1 << ($inner_type::BITS - 1);
+                    } else {
+                        b.shift_right_with(Zero);
+                    }
+                    assert_eq!(b, eq.into());
+                }
+            }
+            #[test]
+            fn get_out_of_range() {
+                assert!(matches!(
+                    $name::default().get($inner_type::BITS as $index_type).unwrap_err(),
+                    Error::IndexOutOfRange
+                ));
+            }
+
+            #[test]
+            fn get_zeros_and_ones() {
+                // setup
+                let mut b = $name::default();
+                for i in 0..($inner_type::BITS as $index_type) {
+                    if i % 2 == 0 {
+                        b.set_unchecked(i, One);
+                    }
+                }
+                // test
+                for i in 0..($inner_type::BITS as $index_type) {
+                    let bit = b.get(i).unwrap();
+                    if i % 2 == 0 {
+                        assert_eq!(bit, 1.into());
+                    } else {
+                        assert_eq!(bit, 0.into());
+                    }
+                }
+            }
+
+            #[test]
+            fn get_ones() {
+                let b = $name::new(!0);
+                for i in 0..($inner_type::BITS as $index_type) {
+                    let bit = b.get(i).unwrap();
+                    assert_eq!(bit, 1.into());
+                }
+            }
+            #[test]
+            fn get_zeros() {
+                let b = $name::new(0);
+                for i in 0..($inner_type::BITS as $index_type) {
+                    let bit = b.get(i).unwrap();
+                    assert_eq!(bit, 0.into());
+                }
+            }
+        
+            #[test]
+            #[should_panic]
+            fn get_unchecked_panic() {
+                $name::default().get_unchecked($inner_type::BITS as $index_type);
+                unreachable!();
+            }
+
+            #[test]
+            fn get_unchecked_zeros_and_ones() {
+                // setup
+                let mut b = $name::default();
+                for i in 0..($inner_type::BITS as $index_type) {
+                    if i % 2 == 0 {
+                        b.set_unchecked(i, One);
+                    }
+                }
+                // test
+                for i in 0..($inner_type::BITS as $index_type) {
+                    let bit = b.get_unchecked(i);
+                    if i % 2 == 0 {
+                        assert_eq!(bit, 1.into());
+                    } else {
+                        assert_eq!(bit, 0.into());
+                    }
+                }
+            }
+        
+            #[test]
+            fn get_unchecked_ones() {
+                let b = $name::new(!0);
+                for i in 0..($inner_type::BITS as $index_type) {
+                    let bit = b.get_unchecked(i);
+                    assert_eq!(bit, 1.into());
+                }
+            }
+            #[test]
+            fn get_unchecked_zeros() {
+                let b = $name::new(0);
+                for i in 0..($inner_type::BITS as $index_type) {
+                    let bit = b.get_unchecked(i);
+                    assert_eq!(bit, 0.into());
+                }
+            }
+        
+            #[test]
+            fn set_out_of_range() {
+                assert!(matches!(
+                    $name::default().set($inner_type::BITS as $index_type, One).unwrap_err(),
+                    Error::IndexOutOfRange
+                ));
+            }
+
+            #[test]
+            #[should_panic]
+            fn set_unchecked_panic() {
+                $name::default().set_unchecked($inner_type::BITS as $index_type, One);
+                unreachable!();
+            }
+
+            #[test]
+            fn set_zeros_to_ones() {
+                let mut b = $name::default();
+                assert_eq!(b, 0.into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    b.set(i, One).unwrap();
+                    assert_eq!(b.get_unchecked(i), One);
+                }
+                assert_eq!(b, (!0).into());
+            }
+
+            #[test]
+            fn set_ones_to_zero() {
+                let mut b = $name::new(!0);
+                let mut eq = !0;
+                assert_eq!(b, (!0).into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), One);
+                    b.set(i, Zero).unwrap();
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    eq <<= 1;
+                    assert_eq!(b, eq.into());
+                }
+            }
+            #[test]
+            fn set_zeros_and_ones() {
+                let mut b = $name::default();
+                assert_eq!(b, 0.into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    b.set(i, One).unwrap();
+                    assert_eq!(b.get_unchecked(i), One);
+                }
+
+                let mut eq = !0;
+                assert_eq!(b, (!0).into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), One);
+                    b.set(i, Zero).unwrap();
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    eq <<= 1;
+                    assert_eq!(b, eq.into());
+                }
+            }
+
+            #[test]
+            fn set_unchecked_zeros_to_ones() {
+                let mut b = $name::default();
+                assert_eq!(b, 0.into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    b.set_unchecked(i, One);
+                    assert_eq!(b.get_unchecked(i), One);
+                }
+                assert_eq!(b, (!0).into());
+            }
+
+            #[test]
+            fn set_unchecked_ones_to_zero() {
+                let mut b = $name::new(!0);
+                let mut eq = !0;
+                assert_eq!(b, (!0).into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), One);
+                    b.set_unchecked(i, Zero);
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    eq <<= 1;
+                    assert_eq!(b, eq.into());
+                }
+            }
+            #[test]
+            fn set_unchecked_zeros_and_ones() {
+                let mut b = $name::default();
+                assert_eq!(b, 0.into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    b.set_unchecked(i, One);
+                    assert_eq!(b.get_unchecked(i), One);
+                }
+
+                let mut eq = !0;
+                assert_eq!(b, (!0).into());
+                for i in 0..($inner_type::BITS as $index_type) {
+                    assert_eq!(b.get_unchecked(i), One);
+                    b.set_unchecked(i, Zero);
+                    assert_eq!(b.get_unchecked(i), Zero);
+                    eq <<= 1;
+                    assert_eq!(b, eq.into());
+                }
+            }
         }
     }
+    )*);
+    }
 
-    #[test]
-    fn get_and_set_set_invert() {
-        let mut b1 = Bits64::new(0);
-        let mut b2 = Bits64::new(!0);
-        let mut eq1: u64 = 0;
-        let mut eq2: u64 = !0;
-        for i in 0..64 {
-            b1.get_and_set(i, |bit| bit.invert()).unwrap();
-            b2.get_and_set(i, |bit| bit.invert()).unwrap();
-            eq1 |= 1 << i;
-            eq2 <<= 1;
-            assert_eq!(b1, eq1.into());
-            assert_eq!(b2, eq2.into());
-        }
+    create_bits_tests! {
+        (Bits8, u8, u8)
+        (Bits16, u16, u16)
+        (Bits32, u32, u32)
+        (Bits64, u64, u32)
+        (Bits128, u128, u32)
     }
 }
 
-#[cfg(test)]
-mod tests_bits8 {
-    use crate::Bit::*;
-    use crate::*;
 
-    #[test]
-    fn iterator_test() {
-        let b = Bits8::new(0);
-        let mut count = 0;
-        for bit in &b {
-            count += 1;
-            assert_eq!(bit, Zero);
-        }
-        assert_eq!(b, 0.into());
-    
-        for bit in Bits8::new(!0) {
-            assert_eq!(bit, One);
-        }
-        // for bit in Bits8::new(0b1) {
-        //     assert_eq!(bit, One);
-        // }
-    }
 
-    #[test]
-    fn get_and_set_out_of_range() {
-        assert!(matches!(
-            Bits8::default().get_and_set(8, |_| One).unwrap_err(),
-            Error::IndexOutOfRange
-        ));
-    }
 
-    #[test]
-    fn get_and_set_set_if_one() {
-        let mut b = Bits8::new(!0);
-        let mut eq: u8 = !0;
-        for i in 0..8 {
-            b.get_and_set(i, |bit| if bit == One { Zero } else { bit })
-                .unwrap();
-            eq <<= 1;
-            assert_eq!(b, eq.into());
-        }
-    }
-
-    #[test]
-    fn get_and_set_set_if_zero() {
-        let mut b = Bits8::new(0);
-        let mut eq: u8 = 0;
-        for i in 0..8 {
-            b.get_and_set(i, |bit| if bit == Zero { One } else { bit })
-                .unwrap();
-            eq |= 1 << i;
-            assert_eq!(b, eq.into());
-        }
-    }
-
-    #[test]
-    fn get_and_set_set_invert() {
-        let mut b1 = Bits8::new(0);
-        let mut b2 = Bits8::new(!0);
-        let mut eq1: u8 = 0;
-        let mut eq2: u8 = !0;
-        for i in 0..8 {
-            b1.get_and_set(i, |bit| bit.invert()).unwrap();
-            b2.get_and_set(i, |bit| bit.invert()).unwrap();
-            eq1 |= 1 << i;
-            eq2 <<= 1;
-            assert_eq!(b1, eq1.into());
-            assert_eq!(b2, eq2.into());
-        }
-    }
-
-    #[test]
-    #[should_panic]
-    fn get_and_set_unchecked_panic() {
-        Bits8::default().get_and_set_unchecked(8, |_| One)
-    }
-
-    #[test]
-    fn get_and_set_unchecked_set_if_one() {
-        let mut b = Bits8::new(0b1111_1111);
-        let mut eq: u8 = !0;
-        for i in 0..8 {
-            b.get_and_set_unchecked(i, |bit| if bit == One { Zero } else { bit });
-            eq <<= 1;
-            assert_eq!(b, eq.into());
-        }
-    }
-
-    #[test]
-    fn get_and_set_unchecked_set_if_zero() {
-        let mut b = Bits8::new(0);
-        let mut eq: u8 = 0;
-        for i in 0..8 {
-            b.get_and_set_unchecked(i, |bit| if bit == Zero { One } else { bit });
-            eq |= 1 << i;
-            assert_eq!(b, eq.into());
-        }
-    }
-
-    #[test]
-    fn get_and_set_unchecked_set_invert() {
-        let mut b1 = Bits8::new(0);
-        let mut b2 = Bits8::new(!0);
-        let mut eq1: u8 = 0;
-        let mut eq2: u8 = !0;
-        for i in 0..8 {
-            b1.get_and_set_unchecked(i, |bit| bit.invert());
-            b2.get_and_set_unchecked(i, |bit| bit.invert());
-            eq1 |= 1 << i;
-            eq2 <<= 1;
-            assert_eq!(b1, eq1.into());
-            assert_eq!(b2, eq2.into());
-        }
-    }
-
-    #[test]
-    fn shift_left_with_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b1.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b11.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b111.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b1111.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b11111.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b111111.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b1111111.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b11111111.into());
-    }
-    #[test]
-    fn shift_left_with_zeros() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0.into());
-    }
-    #[test]
-    fn shift_left_with_zeros_and_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b1.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0b10.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b101.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0b1010.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b1_0101.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0b1010_10.into());
-        b.shift_left_with(One);
-        assert_eq!(b, 0b101_0101.into());
-        b.shift_left_with(Zero);
-        assert_eq!(b, 0b1010_1010.into());
-    }
-
-    #[test]
-    fn shift_right_with_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1000_0000.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1100_0000.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1110_0000.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1111_0000.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1111_1000.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1111_1100.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1111_1110.into());
-        b.shift_right_with(One);
-        assert_eq!(b, 0b1111_1111.into());
-    }
-
-    #[test]
-    fn shift_right_with_zeros() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0.into());
-        for _ in 0..8 {
-            b.shift_right_with(Zero);
-            assert_eq!(b, 0.into());
-        }
-    }
-
-    #[test]
-    fn shift_right_with_zeros_and_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        let mut eq: u8 = 0;
-        for i in 0..8 {
-            eq >>= 1;
-            if i % 2 == 0 {
-                b.shift_right_with(One);
-                eq |= 1 << 7;
-            } else {
-                b.shift_right_with(Zero);
-            }
-            assert_eq!(b, eq.into());
-        }
-    }
-
-    #[test]
-    fn get_out_of_range() {
-        assert!(matches!(
-            Bits8::default().get(8).unwrap_err(),
-            Error::IndexOutOfRange
-        ));
-    }
-
-    #[test]
-    fn get_zeros_and_ones() {
-        let b = Bits8::new(0b0101_0101);
-        for i in 0..8 {
-            let bit_u8: u8 = b.get(i).unwrap().into();
-            if i % 2 == 0 {
-                assert_eq!(bit_u8, 1);
-            } else {
-                assert_eq!(bit_u8, 0);
-            }
-        }
-    }
-
-    #[test]
-    fn get_ones() {
-        let b = Bits8::new(0b1111_1111);
-        for i in 0..8 {
-            let bit_u8: u8 = b.get(i).unwrap().into();
-            assert_eq!(bit_u8, 1);
-        }
-    }
-    #[test]
-    fn get_zeros() {
-        let b = Bits8::new(0b0);
-        for i in 0..8 {
-            let bit_u8: u8 = b.get(i).unwrap().into();
-            assert_eq!(bit_u8, 0);
-        }
-    }
-
-    #[test]
-    #[should_panic]
-    fn get_unchecked_panic() {
-        Bits8::default().get_unchecked(8);
-    }
-
-    #[test]
-    fn get_unchecked_zeros_and_ones() {
-        let b = Bits8::new(0b0101_0101);
-        for i in 0..8 {
-            let bit_u8: u8 = b.get_unchecked(i).into();
-            if i % 2 == 0 {
-                assert_eq!(bit_u8, 1);
-            } else {
-                assert_eq!(bit_u8, 0);
-            }
-        }
-    }
-
-    #[test]
-    fn get_unchecked_ones() {
-        let b = Bits8::new(0b1111_1111);
-        for i in 0..8 {
-            let bit_u8: u8 = b.get_unchecked(i).into();
-            assert_eq!(bit_u8, 1);
-        }
-    }
-    #[test]
-    fn get_unchecked_zeros() {
-        let b = Bits8::new(0b0);
-        for i in 0..8 {
-            let bit_u8: u8 = b.get_unchecked(i).into();
-            assert_eq!(bit_u8, 0);
-        }
-    }
-
-    #[test]
-    fn set_out_of_range() {
-        assert!(matches!(
-            Bits8::default().set(8, One).unwrap_err(),
-            Error::IndexOutOfRange
-        ));
-    }
-
-    #[test]
-    fn set_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.set(0, One).unwrap();
-        assert_eq!(b, 0b0000_0001.into());
-        b.set(4, One).unwrap();
-        assert_eq!(b, 0b0001_0001.into());
-        b.set(7, One).unwrap();
-        assert_eq!(b, 0b1001_0001.into());
-        b.set(1, One).unwrap();
-        assert_eq!(b, 0b1001_0011.into());
-        b.set(0, One).unwrap();
-        assert_eq!(b, 0b1001_0011.into());
-        b.set(2, One).unwrap();
-        assert_eq!(b, 0b1001_0111.into());
-        b.set(5, One).unwrap();
-        assert_eq!(b, 0b1011_0111.into());
-        b.set(3, One).unwrap();
-        assert_eq!(b, 0b1011_1111.into());
-        b.set(6, One).unwrap();
-        assert_eq!(b, 0b1111_1111.into());
-    }
-
-    #[test]
-    fn set_zeros() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.set(0, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(4, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(7, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(1, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(0, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(2, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(5, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(3, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-        b.set(6, Zero).unwrap();
-        assert_eq!(b, 0b0.into());
-    }
-
-    #[test]
-    fn set_zeros_and_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.set(0, One).unwrap();
-        assert_eq!(b, 0b0000_0001.into());
-        b.set(4, Zero).unwrap();
-        assert_eq!(b, 0b0000_0001.into());
-        b.set(7, One).unwrap();
-        assert_eq!(b, 0b1000_0001.into());
-        b.set(1, Zero).unwrap();
-        assert_eq!(b, 0b1000_0001.into());
-        b.set(0, One).unwrap();
-        assert_eq!(b, 0b1000_0001.into());
-        b.set(2, Zero).unwrap();
-        assert_eq!(b, 0b1000_0001.into());
-        b.set(5, One).unwrap();
-        assert_eq!(b, 0b1010_0001.into());
-        b.set(3, Zero).unwrap();
-        assert_eq!(b, 0b1010_0001.into());
-        b.set(6, One).unwrap();
-        assert_eq!(b, 0b1110_0001.into());
-
-        b.set(0, Zero).unwrap();
-        assert_eq!(b, 0b1110_0000.into());
-        b.set(4, One).unwrap();
-        assert_eq!(b, 0b1111_0000.into());
-        b.set(7, Zero).unwrap();
-        assert_eq!(b, 0b0111_0000.into());
-        b.set(1, One).unwrap();
-        assert_eq!(b, 0b0111_0010.into());
-        b.set(0, Zero).unwrap();
-        assert_eq!(b, 0b0111_0010.into());
-        b.set(2, One).unwrap();
-        assert_eq!(b, 0b0111_0110.into());
-        b.set(5, Zero).unwrap();
-        assert_eq!(b, 0b0101_0110.into());
-        b.set(3, One).unwrap();
-        assert_eq!(b, 0b0101_1110.into());
-        b.set(6, Zero).unwrap();
-        assert_eq!(b, 0b0001_1110.into());
-    }
-
-    #[test]
-    #[should_panic]
-    fn set_unchecked_panic() {
-        Bits8::default().set_unchecked(8, One);
-    }
-
-    #[test]
-    fn set_unchecked_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(0, One);
-        assert_eq!(b, 0b0000_0001.into());
-        b.set_unchecked(4, One);
-        assert_eq!(b, 0b0001_0001.into());
-        b.set_unchecked(7, One);
-        assert_eq!(b, 0b1001_0001.into());
-        b.set_unchecked(1, One);
-        assert_eq!(b, 0b1001_0011.into());
-        b.set_unchecked(0, One);
-        assert_eq!(b, 0b1001_0011.into());
-        b.set_unchecked(2, One);
-        assert_eq!(b, 0b1001_0111.into());
-        b.set_unchecked(5, One);
-        assert_eq!(b, 0b1011_0111.into());
-        b.set_unchecked(3, One);
-        assert_eq!(b, 0b1011_1111.into());
-        b.set_unchecked(6, One);
-        assert_eq!(b, 0b1111_1111.into());
-    }
-
-    #[test]
-    fn set_unchecked_zeros() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(0, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(4, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(7, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(1, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(0, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(2, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(5, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(3, Zero);
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(6, Zero);
-        assert_eq!(b, 0b0.into());
-    }
-
-    #[test]
-    fn set_unchecked_zeros_and_ones() {
-        let mut b = Bits8::default();
-        assert_eq!(b, 0b0.into());
-        b.set_unchecked(0, One);
-        assert_eq!(b, 0b0000_0001.into());
-        b.set_unchecked(4, Zero);
-        assert_eq!(b, 0b0000_0001.into());
-        b.set_unchecked(7, One);
-        assert_eq!(b, 0b1000_0001.into());
-        b.set_unchecked(1, Zero);
-        assert_eq!(b, 0b1000_0001.into());
-        b.set_unchecked(0, One);
-        assert_eq!(b, 0b1000_0001.into());
-        b.set_unchecked(2, Zero);
-        assert_eq!(b, 0b1000_0001.into());
-        b.set_unchecked(5, One);
-        assert_eq!(b, 0b1010_0001.into());
-        b.set_unchecked(3, Zero);
-        assert_eq!(b, 0b1010_0001.into());
-        b.set_unchecked(6, One);
-        assert_eq!(b, 0b1110_0001.into());
-
-        b.set_unchecked(0, Zero);
-        assert_eq!(b, 0b1110_0000.into());
-        b.set_unchecked(4, One);
-        assert_eq!(b, 0b1111_0000.into());
-        b.set_unchecked(7, Zero);
-        assert_eq!(b, 0b0111_0000.into());
-        b.set_unchecked(1, One);
-        assert_eq!(b, 0b0111_0010.into());
-        b.set_unchecked(0, Zero);
-        assert_eq!(b, 0b0111_0010.into());
-        b.set_unchecked(2, One);
-        assert_eq!(b, 0b0111_0110.into());
-        b.set_unchecked(5, Zero);
-        assert_eq!(b, 0b0101_0110.into());
-        b.set_unchecked(3, One);
-        assert_eq!(b, 0b0101_1110.into());
-        b.set_unchecked(6, Zero);
-        assert_eq!(b, 0b0001_1110.into());
-    }
-}

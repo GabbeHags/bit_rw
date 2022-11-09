@@ -420,6 +420,7 @@ macro_rules! impl_iterator_for_bits {
 }
 
 macro_rules! impl_all_bits {
+    // (Struct name, number of bits, type for indexing)
     ($(($name:ident, $bits_len:literal, $index_type:ty))*) => ($(
         paste!{
             impl_bits!($name, [<u $bits_len>], $index_type, $bits_len);
@@ -430,6 +431,7 @@ macro_rules! impl_all_bits {
 }
 
 impl_all_bits! {
+    // (Struct name, number of bits, type for indexing)
     (Bits8, 8, u8)
     (Bits16, 16, u16)
     (Bits32, 32, u32)
@@ -837,6 +839,7 @@ mod bits_tests {
     }
 
     create_bits_tests! {
+        // (Struct name, inner type, type for indexing)
         (Bits8, u8, u8)
         (Bits16, u16, u16)
         (Bits32, u32, u32)

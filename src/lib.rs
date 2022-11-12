@@ -201,7 +201,7 @@ macro_rules! impl_bits {
                 #[doc = "[`get_and_set`]:" $name "::get_and_set"]
                 ///
                 /// # Panics
-                /// Will panic if `index` is more than the number of bits.
+                /// Will panic in debug build if `index` is more than the number of bits because of left shift overflow.
                 ///
                 /// # Examples
                 /// ```
@@ -253,7 +253,7 @@ macro_rules! impl_bits {
                 /// Sets the bit at `index` to `bit`.
                 ///
                 /// # Panics
-                /// Will panic if `index` is more than the number of bits.
+                /// Will panic in debug build if `index` is more than the number of bits because of left shift overflow.
                 ///
                 /// # Examples
                 /// ```
@@ -301,9 +301,9 @@ macro_rules! impl_bits {
 
             paste!{
                 /// Returns the bit at `index`.
-                ///
+                /// 
                 /// # Panics
-                /// Will panic if `index` is more than the number of bits.
+                /// Will panic in debug build if `index` is more than the number of bits because of left shift overflow.
                 ///
                 /// # Examples
                 /// ```
@@ -519,11 +519,12 @@ mod bits_tests {
                     Error::IndexOutOfRange
                 ));
             }
+
+            #[cfg(debug_assertions)]
             #[test]
             #[should_panic]
             fn get_and_set_unchecked_panic() {
                 $name::default().get_and_set_unchecked($inner_type::BITS as $index_type, |_| One);
-                unreachable!();
             }
 
             #[test]
@@ -683,11 +684,11 @@ mod bits_tests {
                 }
             }
         
+            #[cfg(debug_assertions)]
             #[test]
             #[should_panic]
             fn get_unchecked_panic() {
                 $name::default().get_unchecked($inner_type::BITS as $index_type);
-                unreachable!();
             }
 
             #[test]
@@ -735,11 +736,11 @@ mod bits_tests {
                 ));
             }
 
+            #[cfg(debug_assertions)]
             #[test]
             #[should_panic]
             fn set_unchecked_panic() {
                 $name::default().set_unchecked($inner_type::BITS as $index_type, One);
-                unreachable!();
             }
 
             #[test]

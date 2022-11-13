@@ -102,7 +102,7 @@ macro_rules! impl_bits {
     ($name:ident, $size:ty, $index_type:ty, $bit_len:literal) => {
         paste!{
             #[derive(Default)]
-            #[doc = "Wrapper type of the primitive type `" $size "` to be able to read/write to the bits."]
+            #[doc = "Wrapper type of the primitive type `" $size "` to be able to read/write to the bits. The memory size of this struct is the same as the primitive type."]
             pub struct $name {
                 bits: $size,
             }
@@ -197,6 +197,7 @@ macro_rules! impl_bits {
                 /// Gets the bit at `index` and pass it to `func`, then set the bit at `index` to the result of `func`.
                 ///
                 /// This method is the same as [`get_and_set`] but won't do a range check on `index`.
+                /// If the `index` is more than the number of bits, the result can be unexpected.
                 ///
                 #[doc = "[`get_and_set`]:" $name "::get_and_set"]
                 ///
@@ -252,6 +253,8 @@ macro_rules! impl_bits {
             paste!{
                 /// Sets the bit at `index` to `bit`.
                 ///
+                /// If the `index` is more than the number of bits, the result can be unexpected.
+                /// 
                 /// # Panics
                 /// Will panic in debug build if `index` is more than the number of bits because of left shift overflow.
                 ///
@@ -301,6 +304,8 @@ macro_rules! impl_bits {
 
             paste!{
                 /// Returns the bit at `index`.
+                /// 
+                /// If the `index` is more than the number of bits, the result can be unexpected.
                 /// 
                 /// # Panics
                 /// Will panic in debug build if `index` is more than the number of bits because of left shift overflow.

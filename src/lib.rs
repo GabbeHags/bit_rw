@@ -102,7 +102,7 @@ macro_rules! impl_bits {
     ($name:ident, $size:ty, $index_type:ty, $bit_len:literal) => {
         paste!{
             #[derive(Default)]
-            #[doc = "Wrapper type of the primitive type `" $size "` to be able to read/write to the bits. The memory size of this struct is the same as the primitive type."]
+            #[doc = "Wrapper type of the primitive type `" $size "` to be able to read/write to the bits. The memory size of this struct is the same as the primitive type.w"]
             pub struct $name {
                 bits: $size,
             }
@@ -136,6 +136,31 @@ macro_rules! impl_bits {
                     self.bits <<= 1;
                     if bit == Bit::One {
                         self.bits |= 1;
+                    }
+                }
+            }
+
+            paste!{
+                /// Shifts all bits to the left and inserts the `bit` at the left most bit.
+                ///
+                /// Shifting with bit [`Bit::Zero`] is the same as a normal shift left.
+                ///
+                /// # Example
+                /// ```
+                #[doc = "use bit_rw::{" $name ", Bit};"]
+                ///
+                #[doc = "let mut b = " $name "::new(0);   // 0b0"]
+                /// b.shift_left_with(Bit::One);  // 0b01
+                /// b.shift_left_with(Bit::One);  // 0b011
+                /// b.shift_left_with(Bit::Zero); // 0b0110
+                ///
+                /// assert_eq!(b, 6.into());
+                /// ```
+                pub fn shift_left_n_times_with(&mut self, n: $index_type, bit: Bit) {
+                    self.bits <<= n;
+                    if bit == Bit::One {
+
+                        self.bits |= (1 << n);
                     }
                 }
             }
@@ -254,7 +279,7 @@ macro_rules! impl_bits {
                 /// Sets the bit at `index` to `bit`.
                 ///
                 /// If the `index` is more than the number of bits, the result can be unexpected.
-                /// 
+                ///
                 /// # Panics
                 /// Will panic in debug build if `index` is more than the number of bits because of left shift overflow.
                 ///
@@ -304,9 +329,9 @@ macro_rules! impl_bits {
 
             paste!{
                 /// Returns the bit at `index`.
-                /// 
+                ///
                 /// If the `index` is more than the number of bits, the result can be unexpected.
-                /// 
+                ///
                 /// # Panics
                 /// Will panic in debug build if `index` is more than the number of bits because of left shift overflow.
                 ///
@@ -424,6 +449,66 @@ macro_rules! impl_iterator_for_bits {
     };
 }
 
+macro_rules! impl_shl_and_shr_for_bits {
+    ($name:ident, $size:ty) => {
+        impl std::ops::Shr<Self> for crate::$name {
+            type Output = Self;
+
+            fn shr(self, rhs: Self) -> Self::Output {
+                $name::new(self.bits.shr(rhs.bits))
+            }
+        }
+
+        impl std::ops::Shl<Self> for crate::$name {
+            type Output = Self;
+
+            fn shl(self, rhs: Self) -> Self::Output {
+                $name::new(self.bits.shl(rhs.bits))
+            }
+        }
+
+        impl std::ops::Shr<$size> for crate::$name {
+            type Output = Self;
+
+            fn shr(self, rhs: $size) -> Self::Output {
+                $name::new(self.bits.shr(rhs))
+            }
+        }
+
+        impl std::ops::Shl<$size> for crate::$name {
+            type Output = Self;
+
+            fn shl(self, rhs: $size) -> Self::Output {
+                $name::new(self.bits.shl(rhs))
+            }
+        }
+
+        impl std::ops::ShrAssign<Self> for crate::$name {
+            fn shr_assign(&mut self, rhs: Self) {
+                self.bits.shr_assign(rhs.bits)
+            }
+        }
+
+        impl std::ops::ShlAssign<Self> for crate::$name {
+            fn shl_assign(&mut self, rhs: Self) {
+                self.bits.shl_assign(rhs.bits)
+            }
+        }
+
+        impl std::ops::ShrAssign<$size> for crate::$name {
+            fn shr_assign(&mut self, rhs: $size) {
+                self.bits.shr_assign(rhs)
+            }
+        }
+
+        impl std::ops::ShlAssign<$size> for crate::$name {
+            fn shl_assign(&mut self, rhs: $size) {
+                self.bits.shl_assign(rhs)
+            }
+        }
+    };
+}
+
 macro_rules! impl_all_bits {
     // (Struct name, number of bits, type for indexing)
     ($(($name:ident, $bits_len:literal, $index_type:ty))*) => ($(
@@ -431,6 +516,7 @@ macro_rules! impl_all_bits {
             impl_bits!($name, [<u $bits_len>], $index_type, $bits_len);
             impl_debug_for_bits!($name, $bits_len);
             impl_iterator_for_bits!($name, [<$name Iterator>], [<$name IteratorConsuming>], $index_type);
+            impl_shl_and_shr_for_bits!($name, [<u $bits_len>]);
         }
     )*);
 }
@@ -446,7 +532,17 @@ impl_all_bits! {
 
 #[cfg(test)]
 mod bits_tests {
+
     use paste::paste;
+
+    // fn test_fun() {
+    //     use crate::Bit::*;
+    //     use crate::*;
+    //     use std::ops::ShlAssign;
+    //     let mut b = Bits8::new(!0);
+    //     let mut eq: u8 = !0;
+    //     eq.shl_assign(1);
+    // }
 
     macro_rules! create_bits_tests {
     ($(($name:ident, $inner_type:ty, $index_type:ty))*) => ($(
@@ -454,6 +550,56 @@ mod bits_tests {
         mod [<tests_ $name:lower>] {
             use crate::Bit::*;
             use crate::*;
+
+            #[test]
+            fn shl_ones_to_zeros() {
+                use std::ops::Shl;
+                let mut b = $name::new(!0);
+                let mut eq: $inner_type = !0;
+                b = b.shl((($inner_type::BITS) as $inner_type-1));
+                eq = eq.shl((($inner_type::BITS) as $inner_type-1));
+                assert_eq!(b, eq.into());
+                b = b.shl(1);
+                assert_eq!(b, 0.into());
+            }
+
+            #[test]
+            fn shr_ones_to_zeros() {
+                use std::ops::Shr;
+                let mut b = $name::new(!0);
+                let mut eq: $inner_type = !0;
+                b = b.shr((($inner_type::BITS) as $inner_type-1));
+                eq = eq.shr((($inner_type::BITS) as $inner_type-1));
+                assert_eq!(b, eq.into());
+                b = b.shr(1);
+                assert_eq!(b, 0.into());
+            }
+
+            #[test]
+            fn shl_assign_ones_to_zeros() {
+                use std::ops::ShlAssign;
+                let mut b = $name::new(!0);
+                let mut eq: $inner_type = !0;
+
+                b.shl_assign((($inner_type::BITS) as $inner_type-1));
+                eq.shl_assign((($inner_type::BITS) as $inner_type-1));
+                assert_eq!(b, eq.into());
+                b.shl_assign(1);
+                assert_eq!(b, 0.into());
+            }
+
+            #[test]
+            fn shr_assign_ones_to_zeros() {
+                use std::ops::ShrAssign;
+                let mut b = $name::new(!0);
+                let mut eq: $inner_type = !0;
+                b.shr_assign((($inner_type::BITS) as $inner_type-1));
+                eq.shr_assign((($inner_type::BITS) as $inner_type-1));
+                assert_eq!(b, eq.into());
+                b.shr_assign(1);
+                assert_eq!(b, 0.into());
+            }
+
             #[test]
             fn get_and_set_set_if_one() {
                 let mut b = $name::new(!0);
@@ -504,10 +650,10 @@ mod bits_tests {
                 }
                 assert_eq!(b, 0.into());
                 assert_eq!(count, $inner_type::BITS);
-                
+
                 let b = $name::new(!0);
                 count = 0;
-        
+
                 for bit in b {
                     count += 1;
                     assert_eq!(bit, One);
@@ -542,7 +688,7 @@ mod bits_tests {
                     assert_eq!(b, eq.into());
                 }
             }
-        
+
             #[test]
             fn get_and_set_unchecked_set_if_zero() {
                 let mut b = $name::new(0);
@@ -553,7 +699,7 @@ mod bits_tests {
                     assert_eq!(b, eq.into());
                 }
             }
-        
+
             #[test]
             fn get_and_set_unchecked_set_invert() {
                 let mut b1 = $name::new(0);
@@ -688,7 +834,7 @@ mod bits_tests {
                     assert_eq!(bit, 0.into());
                 }
             }
-        
+
             #[cfg(debug_assertions)]
             #[test]
             #[should_panic]
@@ -715,7 +861,7 @@ mod bits_tests {
                     }
                 }
             }
-        
+
             #[test]
             fn get_unchecked_ones() {
                 let b = $name::new(!0);
@@ -732,7 +878,7 @@ mod bits_tests {
                     assert_eq!(bit, 0.into());
                 }
             }
-        
+
             #[test]
             fn set_out_of_range() {
                 assert!(matches!(
@@ -853,7 +999,3 @@ mod bits_tests {
         (Bits128, u128, u32)
     }
 }
-
-
-
-
